@@ -1,12 +1,12 @@
 #import <UIKit/UIKit.h>
 #import <Cordova/CDVPlugin.h>
-
 #import <PassKit/PassKit.h>
 
 typedef void (^ARAuthorizationBlock)(PKPaymentAuthorizationStatus);
 typedef void (^ARListUpdateBlock)(PKPaymentAuthorizationStatus, NSArray<PKShippingMethod *>*, NSArray<PKPaymentSummaryItem *>*);
 
-@interface CDVApplePay : CDVPlugin <PKPaymentAuthorizationViewControllerDelegate> {}
+@interface CDVApplePay : CDVPlugin <PKPaymentAuthorizationControllerDelegate> // Update the protocol here
+{}
 
 @property (nonatomic, strong) ARAuthorizationBlock paymentAuthorizationBlock;
 

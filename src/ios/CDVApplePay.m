@@ -1,5 +1,5 @@
 #import "CDVApplePay.h"
-@import AddressBook;
+@import PassKit;
 
 @implementation CDVApplePay
 
@@ -7,15 +7,11 @@
 
 - (void)canMakePayments:(CDVInvokedUrlCommand*)command
 {
-    if ([PKPaymentAuthorizationViewController canMakePayments]) {
-        if ((floor(NSFoundationVersionNumber) <= NSFoundationVersionNumber_iOS_8_0)) {
-            CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString: @"This device cannot make payments."];
-            [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
-            return;
-        } else if ([[NSProcessInfo processInfo] isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){9, 0, 0}]) {
+    if ([PKPaymentAuthorizationController canMakePayments]) {
+        if (@available(iOS 9.0, *)) {
             if (command.arguments[0] != [NSNull null] && [command.arguments[0] objectForKey:@"supportedNetworks"] != nil) {
                 if ([command.arguments[0] objectForKey:@"merchantCapabilities"] != nil) {
-                    if ([PKPaymentAuthorizationViewController
+                    if ([PKPaymentAuthorizationController
                             canMakePaymentsUsingNetworks:[self supportedNetworksFromArguments:command.arguments]
                                             capabilities:[self merchantCapabilitiesFromArguments:command.arguments]]) {
                         CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString: @"This device can make payments and has a supported card."];
@@ -27,7 +23,7 @@
                         return;
                     }
                 } else { // merchantCapabilities is nil
-                    if ([PKPaymentAuthorizationViewController canMakePaymentsUsingNetworks:[self supportedNetworksFromArguments:command.arguments]]) {
+                    if ([PKPaymentAuthorizationController canMakePaymentsUsingNetworks:[self supportedNetworksFromArguments:command.arguments]]) {
                         CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString: @"This device can make payments and has a supported card."];
                         [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
                         return;
@@ -86,53 +82,57 @@
         return PKShippingTypeServicePickup;
     }
 
-
     return PKShippingTypeShipping;
 }
 
-- (PKAddressField)billingAddressRequirementFromArguments:(NSArray *)arguments
-{
-    NSArray *billingAddressRequirement = [[arguments objectAtIndex:0] objectForKey:@"billingAddressRequirement"];
-    PKAddressField requiredFields = PKAddressFieldNone;
-
-    for (id requirement in billingAddressRequirement) {
-        if ([requirement isEqualToString:@"all"]) {
-            requiredFields = requiredFields | PKAddressFieldAll;
-        } else if ([requirement isEqualToString:@"postcode"]) {
-            requiredFields = requiredFields | PKAddressFieldPostalAddress;
-        } else if ([requirement isEqualToString:@"name"]) {
-            requiredFields = requiredFields | PKAddressFieldName;
-        } else if ([requirement isEqualToString:@"email"]) {
-            requiredFields = requiredFields | PKAddressFieldEmail;
-        } else if ([requirement isEqualToString:@"phone"]) {
-            requiredFields = requiredFields | PKAddressFieldPhone;
-        }
-    }
-
-    return requiredFields;
-}
-
-- (PKAddressField)shippingAddressRequirementFromArguments:(NSArray *)arguments
+- (NSSet<PKContactField> *)shippingAddressRequirementFromArguments:(NSArray *)arguments
 {
     NSArray *shippingAddressRequirements = [[arguments objectAtIndex:0] objectForKey:@"shippingAddressRequirement"];
-    PKAddressField requiredFields = PKAddressFieldNone;
+    NSMutableSet<PKContactField> *requiredFields = [NSMutableSet set];
 
     for (id requirement in shippingAddressRequirements) {
-        if ([requirement isEqualToString:@"all"]) {
-            requiredFields = requiredFields | PKAddressFieldAll;
-        } else if ([requirement isEqualToString:@"postcode"]) {
-            requiredFields = requiredFields | PKAddressFieldPostalAddress;
-        } else if ([requirement isEqualToString:@"name"]) {
-            requiredFields = requiredFields | PKAddressFieldName;
-        } else if ([requirement isEqualToString:@"email"]) {
-            requiredFields = requiredFields | PKAddressFieldEmail;
-        } else if ([requirement isEqualToString:@"phone"]) {
-            requiredFields = requiredFields | PKAddressFieldPhone;
+        if ([requirement isKindOfClass:[NSString class]]) {
+            if ([requirement isEqualToString:@"all"]) {
+                [requiredFields addObjectsFromArray:@[PKContactFieldPostalAddress, PKContactFieldName, PKContactFieldEmailAddress, PKContactFieldPhoneNumber]];
+            } else if ([requirement isEqualToString:@"postcode"]) {
+                [requiredFields addObject:PKContactFieldPostalAddress];
+            } else if ([requirement isEqualToString:@"name"]) {
+                [requiredFields addObject:PKContactFieldName];
+            } else if ([requirement isEqualToString:@"email"]) {
+                [requiredFields addObject:PKContactFieldEmailAddress];
+            } else if ([requirement isEqualToString:@"phone"]) {
+                [requiredFields addObject:PKContactFieldPhoneNumber];
+            }
         }
     }
 
-    return requiredFields;
+    return [requiredFields copy];
 }
+
+- (NSSet<PKContactField> *)billingAddressRequirementFromArguments:(NSArray *)arguments
+{
+    NSArray *billingAddressRequirement = [[arguments objectAtIndex:0] objectForKey:@"billingAddressRequirement"];
+    NSMutableSet<PKContactField> *requiredFields = [NSMutableSet set];
+
+    for (id requirement in billingAddressRequirement) {
+        if ([requirement isKindOfClass:[NSString class]]) {
+            if ([requirement isEqualToString:@"all"]) {
+                [requiredFields addObjectsFromArray:@[PKContactFieldPostalAddress, PKContactFieldName, PKContactFieldEmailAddress, PKContactFieldPhoneNumber]];
+            } else if ([requirement isEqualToString:@"postcode"]) {
+                [requiredFields addObject:PKContactFieldPostalAddress];
+            } else if ([requirement isEqualToString:@"name"]) {
+                [requiredFields addObject:PKContactFieldName];
+            } else if ([requirement isEqualToString:@"email"]) {
+                [requiredFields addObject:PKContactFieldEmailAddress];
+            } else if ([requirement isEqualToString:@"phone"]) {
+                [requiredFields addObject:PKContactFieldPhoneNumber];
+            }
+        }
+    }
+
+    return [requiredFields copy];
+}
+
 
 - (NSArray *)itemsFromArguments:(NSArray *)arguments
 {
@@ -203,7 +203,6 @@
 
     NSMutableArray *shippingMethods = [[NSMutableArray alloc] init];
 
-
     for (NSDictionary *desc in shippingDescriptions) {
 
         NSString *identifier = [desc objectForKey:@"identifier"];
@@ -212,7 +211,9 @@
 
         NSDecimalNumber *amount = [NSDecimalNumber decimalNumberWithDecimal:[[desc objectForKey:@"amount"] decimalValue]];
 
-        PKPaymentSummaryItem *newMethod = [self shippingMethodWithIdentifier:identifier detail:detail label:label amount:amount];
+        PKShippingMethod *newMethod = [PKShippingMethod summaryItemWithLabel:label amount:amount];
+        newMethod.identifier = identifier;
+        newMethod.detail = detail;
 
         [shippingMethods addObject:newMethod];
     }
@@ -220,348 +221,106 @@
     return shippingMethods;
 }
 
-- (PKPaymentAuthorizationStatus)paymentAuthorizationStatusFromArgument:(NSString *)paymentAuthorizationStatus
+- (PKPaymentAuthorizationStatus)paymentAuthorizationStatusFromArgument:(NSString *)argument
 {
-
-    if ([paymentAuthorizationStatus isEqualToString:@"success"]) {
+    if ([argument isEqualToString:@"success"]) {
         return PKPaymentAuthorizationStatusSuccess;
-    } else if ([paymentAuthorizationStatus isEqualToString:@"failure"]) {
+    } else if ([argument isEqualToString:@"failure"]) {
         return PKPaymentAuthorizationStatusFailure;
-    } else if ([paymentAuthorizationStatus isEqualToString:@"invalid-billing-address"]) {
+    } else if ([argument isEqualToString:@"invalid-billing-address"]) {
         return PKPaymentAuthorizationStatusInvalidBillingPostalAddress;
-    } else if ([paymentAuthorizationStatus isEqualToString:@"invalid-shipping-address"]) {
+    } else if ([argument isEqualToString:@"invalid-shipping-address"]) {
         return PKPaymentAuthorizationStatusInvalidShippingPostalAddress;
-    } else if ([paymentAuthorizationStatus isEqualToString:@"invalid-shipping-contact"]) {
+    } else if ([argument isEqualToString:@"invalid-shipping-contact"]) {
         return PKPaymentAuthorizationStatusInvalidShippingContact;
-    } else if ([paymentAuthorizationStatus isEqualToString:@"require-pin"]) {
+    } else if ([argument isEqualToString:@"require-pin"]) {
         return PKPaymentAuthorizationStatusPINRequired;
-    } else if ([paymentAuthorizationStatus isEqualToString:@"incorrect-pin"]) {
+    } else if ([argument isEqualToString:@"incorrect-pin"]) {
         return PKPaymentAuthorizationStatusPINIncorrect;
-    } else if ([paymentAuthorizationStatus isEqualToString:@"locked-pin"]) {
+    } else if ([argument isEqualToString:@"locked-pin"]) {
         return PKPaymentAuthorizationStatusPINLockout;
     }
 
     return PKPaymentAuthorizationStatusFailure;
 }
 
-- (void)completeLastTransaction:(CDVInvokedUrlCommand*)command
-{
-    if (self.paymentAuthorizationBlock) {
-
-        NSString *paymentAuthorizationStatusString = [command.arguments objectAtIndex:0];
-        NSLog(@"ApplePay completeLastTransaction == %@", paymentAuthorizationStatusString);
-
-        PKPaymentAuthorizationStatus paymentAuthorizationStatus = [self paymentAuthorizationStatusFromArgument:paymentAuthorizationStatusString];
-        self.paymentAuthorizationBlock(paymentAuthorizationStatus);
-
-        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString: @"Payment status applied."];
-        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
-
-    }
-}
-
 - (void)makePaymentRequest:(CDVInvokedUrlCommand*)command
 {
+    if (![PKPaymentAuthorizationController canMakePayments]) {
+        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString: @"This device cannot make payments."];
+        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+        return;
+    }
+
+    PKPaymentRequest *paymentRequest = [[PKPaymentRequest alloc] init];
+    paymentRequest.merchantIdentifier = [self merchantIdentifierFromArguments:command.arguments];
+    paymentRequest.countryCode = [self countryCodeFromArguments:command.arguments];
+    paymentRequest.currencyCode = [self currencyCodeFromArguments:command.arguments];
+    paymentRequest.supportedNetworks = [self supportedNetworksFromArguments:command.arguments];
+    paymentRequest.merchantCapabilities = [self merchantCapabilitiesFromArguments:command.arguments];
+    paymentRequest.paymentSummaryItems = [self itemsFromArguments:command.arguments];
+    paymentRequest.requiredBillingContactFields = [self billingAddressRequirementFromArguments:command.arguments];
+    paymentRequest.requiredShippingContactFields = [self shippingAddressRequirementFromArguments:command.arguments];
+    paymentRequest.shippingMethods = [self shippingMethodsFromArguments:command.arguments];
+    paymentRequest.shippingType = [self shippingTypeFromArguments:command.arguments];
+
     self.paymentCallbackId = command.callbackId;
 
-    NSLog(@"ApplePay canMakePayments == %s", [PKPaymentAuthorizationViewController canMakePayments]? "true" : "false");
-    if ([PKPaymentAuthorizationViewController canMakePayments] == NO) {
-        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString: @"This device cannot make payments."];
-        [self.commandDelegate sendPluginResult:result callbackId:self.paymentCallbackId];
-        return;
-    }
-
-    // reset any lingering callbacks, incase the previous payment failed.
-    self.paymentAuthorizationBlock = nil;
-
-    PKPaymentRequest *request = [PKPaymentRequest new];
-
-    // All this data is loaded from the Cordova object passed in. See documentation.
-    [request setCurrencyCode:[self currencyCodeFromArguments:command.arguments]];
-    [request setCountryCode:[self countryCodeFromArguments:command.arguments]];
-    [request setMerchantIdentifier:[self merchantIdentifierFromArguments:command.arguments]];
-    [request setMerchantCapabilities:[self merchantCapabilitiesFromArguments:command.arguments]];
-    [request setSupportedNetworks:[self supportedNetworksFromArguments:command.arguments]];
-    [request setRequiredBillingAddressFields:[self billingAddressRequirementFromArguments:command.arguments]];
-    [request setRequiredShippingAddressFields:[self shippingAddressRequirementFromArguments:command.arguments]];
-    [request setShippingType:[self shippingTypeFromArguments:command.arguments]];
-    [request setShippingMethods:[self shippingMethodsFromArguments:command.arguments]];
-    [request setPaymentSummaryItems:[self itemsFromArguments:command.arguments]];
-    self.shippingMethods = [self shippingMethodsFromArguments:command.arguments];
-    self.summaryItems = [self itemsFromArguments:command.arguments];
-
-    NSLog(@"ApplePay request == %@", request);
-
-    PKPaymentAuthorizationViewController *authVC = [[PKPaymentAuthorizationViewController alloc] initWithPaymentRequest:request];
-
-    authVC.delegate = self;
-
-    if (authVC == nil) {
-        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString: @"PKPaymentAuthorizationViewController was nil."];
-        [self.commandDelegate sendPluginResult:result callbackId:self.paymentCallbackId];
-        return;
-    }
-
-    [self.viewController presentViewController:authVC animated:YES completion:nil];
-}
-
-- (void)updateItemsAndShippingMethods:(CDVInvokedUrlCommand*)command
-{
-    if (self.updateItemsAndShippingMethodsBlock != nil) {
-        self.shippingMethods = [self shippingMethodsFromArguments:command.arguments];
-        self.summaryItems = [self itemsFromArguments:command.arguments];
-        self.updateItemsAndShippingMethodsBlock(PKPaymentAuthorizationStatusSuccess, self.shippingMethods, self.summaryItems);
-        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString: @"Updated List Info"];
-        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+    if (@available(iOS 12.0, *)) {
+        PKPaymentAuthorizationController *paymentAuthorizationController = [[PKPaymentAuthorizationController alloc] initWithPaymentRequest:paymentRequest];
+        paymentAuthorizationController.delegate = self;
+        [paymentAuthorizationController presentWithCompletion:^(BOOL success) {
+            if (!success) {
+                CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString: @"Error presenting payment sheet."];
+                [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
+            }
+        }];
     } else {
-        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString: @"Did you make a payment request?"];
+        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString: @"Apple Pay is not supported on this device."];
         [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
     }
 }
 
-- (void)paymentAuthorizationViewControllerDidFinish:(PKPaymentAuthorizationViewController *)controller
+- (void)paymentAuthorizationController:(PKPaymentAuthorizationController *)controller
+                   didAuthorizePayment:(PKPayment *)payment
+                            completion:(void (^)(PKPaymentAuthorizationResult *result))completion
 {
-    [self.viewController dismissViewControllerAnimated:YES completion:nil];
+    NSMutableDictionary *paymentResponse = [[NSMutableDictionary alloc] init];
+    [paymentResponse setObject:payment.token.transactionIdentifier forKey:@"transactionIdentifier"];
+    [paymentResponse setObject:[NSString stringWithUTF8String:payment.token.paymentData.bytes] forKey:@"paymentData"];
 
-    CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString: @"Payment not completed."];
+    NSMutableDictionary *billingContact = [[NSMutableDictionary alloc] init];
+    billingContact[@"emailAddress"] = payment.billingContact.emailAddress;
+    billingContact[@"phoneNumber"] = payment.billingContact.phoneNumber.stringValue;
+    billingContact[@"name"] = [NSString stringWithFormat:@"%@ %@", payment.billingContact.name.givenName, payment.billingContact.name.familyName];
+    billingContact[@"address"] = payment.billingContact.postalAddress.street;
+    billingContact[@"city"] = payment.billingContact.postalAddress.city;
+    billingContact[@"state"] = payment.billingContact.postalAddress.state;
+    billingContact[@"postalCode"] = payment.billingContact.postalAddress.postalCode;
+    billingContact[@"country"] = payment.billingContact.postalAddress.country;
+    [paymentResponse setObject:billingContact forKey:@"billingContact"];
+
+    NSMutableDictionary *shippingContact = [[NSMutableDictionary alloc] init];
+    shippingContact[@"emailAddress"] = payment.shippingContact.emailAddress;
+    shippingContact[@"phoneNumber"] = payment.shippingContact.phoneNumber.stringValue;
+    shippingContact[@"name"] = [NSString stringWithFormat:@"%@ %@", payment.shippingContact.name.givenName, payment.shippingContact.name.familyName];
+    shippingContact[@"address"] = payment.shippingContact.postalAddress.street;
+    shippingContact[@"city"] = payment.shippingContact.postalAddress.city;
+    shippingContact[@"state"] = payment.shippingContact.postalAddress.state;
+    shippingContact[@"postalCode"] = payment.shippingContact.postalAddress.postalCode;
+    shippingContact[@"country"] = payment.shippingContact.postalAddress.country;
+    [paymentResponse setObject:shippingContact forKey:@"shippingContact"];
+
+    CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:paymentResponse];
+    [result setKeepCallback:[NSNumber numberWithBool:YES]];
     [self.commandDelegate sendPluginResult:result callbackId:self.paymentCallbackId];
+
+    completion([[PKPaymentAuthorizationResult alloc] initWithStatus:PKPaymentAuthorizationStatusSuccess errors:nil]);
 }
 
-- (NSDictionary*) formatPaymentForApplication:(PKPayment *)payment {
-    NSString *paymentData = [payment.token.paymentData base64EncodedStringWithOptions:0];
-
-    //    NSDictionary *response = @{
-    //                               @"paymentData":paymentData,
-    //                               @"transactionIdentifier":payment.token.transactionIdentifier
-    //                               };
-
-    NSMutableDictionary *response = [[NSMutableDictionary alloc] init];
-
-    [response setObject:paymentData  forKey:@"paymentData"];
-    [response setObject:payment.token.transactionIdentifier  forKey:@"transactionIdentifier"];
-
-    [response setObject:payment.token.paymentMethod.displayName  forKey:@"paymentMethodDisplayName"];
-    [response setObject:payment.token.paymentMethod.network  forKey:@"paymentMethodNetwork"];
-
-    NSString *typeCard = nil;
-
-    switch(payment.token.paymentMethod.type) {
-        case PKPaymentMethodTypeUnknown:
-            typeCard = @"unknown"; // The card’s type is not known.
-            break;
-        case PKPaymentMethodTypeDebit:
-            typeCard = @"debit"; // A debit card.
-            break;
-        case PKPaymentMethodTypeCredit:
-            typeCard = @"credit";// A credit card.
-            break;
-        case PKPaymentMethodTypePrepaid:
-            typeCard = @"prepaid";// A prepaid card.
-            break;
-        case PKPaymentMethodTypeStore:
-            typeCard = @"store";// A store card.
-            break;
-        default:
-            typeCard = @"error";// A store card.
-    }
-
-    [response setObject:typeCard  forKey:@"paymentMethodTypeCard"];
-
-    PKContact *billingContact = payment.billingContact;
-    if (billingContact) {
-        if (billingContact.emailAddress) {
-            [response setObject:billingContact.emailAddress forKey:@"billingEmailAddress"];
-        }
-
-        if ([[NSProcessInfo processInfo] isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){9, 2, 0}]) {
-            if (billingContact.supplementarySubLocality) {
-                [response setObject:billingContact.supplementarySubLocality forKey:@"billingSupplementarySubLocality"];
-            }
-        }
-
-        if (billingContact.name) {
-
-            if (billingContact.name.givenName) {
-                [response setObject:billingContact.name.givenName forKey:@"billingNameFirst"];
-            }
-
-            if (billingContact.name.middleName) {
-                [response setObject:billingContact.name.middleName forKey:@"billingNameMiddle"];
-            }
-
-            if (billingContact.name.familyName) {
-                [response setObject:billingContact.name.familyName forKey:@"billingNameLast"];
-            }
-
-        }
-
-        if (billingContact.postalAddress) {
-
-            if (billingContact.postalAddress.street) {
-                [response setObject:billingContact.postalAddress.street forKey:@"billingAddressStreet"];
-            }
-
-            if (billingContact.postalAddress.city) {
-                [response setObject:billingContact.postalAddress.city forKey:@"billingAddressCity"];
-            }
-
-            if (billingContact.postalAddress.state) {
-                [response setObject:billingContact.postalAddress.state forKey:@"billingAddressState"];
-            }
-
-
-            if (billingContact.postalAddress.postalCode) {
-                [response setObject:billingContact.postalAddress.postalCode forKey:@"billingPostalCode"];
-            }
-
-            if (billingContact.postalAddress.country) {
-                [response setObject:billingContact.postalAddress.country forKey:@"billingCountry"];
-            }
-
-            if (billingContact.postalAddress.ISOCountryCode) {
-                [response setObject:billingContact.postalAddress.ISOCountryCode forKey:@"billingISOCountryCode"];
-            }
-
-        }
-    }
-
-    PKContact *shippingContact = payment.shippingContact;
-    if (shippingContact) {
-        if (shippingContact.emailAddress) {
-            [response setObject:shippingContact.emailAddress forKey:@"shippingEmailAddress"];
-        }
-
-        if (shippingContact.phoneNumber) {
-            [response setObject:shippingContact.phoneNumber.stringValue forKey:@"shippingPhoneNumber"];
-        }
-
-        if (shippingContact.name) {
-
-            if (shippingContact.name.givenName) {
-                [response setObject:shippingContact.name.givenName forKey:@"shippingNameFirst"];
-            }
-
-            if (shippingContact.name.middleName) {
-                [response setObject:shippingContact.name.middleName forKey:@"shippingNameMiddle"];
-            }
-
-            if (shippingContact.name.familyName) {
-                [response setObject:shippingContact.name.familyName forKey:@"shippingNameLast"];
-            }
-
-        }
-        if ([[NSProcessInfo processInfo] isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){9, 2, 0}]) {
-            if (shippingContact.supplementarySubLocality) {
-                [response setObject:shippingContact.supplementarySubLocality forKey:@"shippingSupplementarySubLocality"];
-            }
-        }
-
-        if (shippingContact.postalAddress) {
-
-            if (shippingContact.postalAddress.street) {
-                [response setObject:shippingContact.postalAddress.street forKey:@"shippingAddressStreet"];
-            }
-
-            if (shippingContact.postalAddress.city) {
-                [response setObject:shippingContact.postalAddress.city forKey:@"shippingAddressCity"];
-            }
-
-            if (shippingContact.postalAddress.state) {
-                [response setObject:shippingContact.postalAddress.state forKey:@"shippingAddressState"];
-            }
-
-            if (shippingContact.postalAddress.postalCode) {
-                [response setObject:shippingContact.postalAddress.postalCode forKey:@"shippingPostalCode"];
-            }
-
-            if (shippingContact.postalAddress.country) {
-                [response setObject:shippingContact.postalAddress.country forKey:@"shippingCountry"];
-            }
-
-            if (shippingContact.postalAddress.ISOCountryCode) {
-                [response setObject:shippingContact.postalAddress.ISOCountryCode forKey:@"shippingISOCountryCode"];
-            }
-
-        }
-    }
-
-    return response;
-}
-
-- (void)paymentAuthorizationViewController:(PKPaymentAuthorizationViewController *)controller
-                       didAuthorizePayment:(PKPayment *)payment
-                                completion:(void (^)(PKPaymentAuthorizationStatus status))completion
+- (void)paymentAuthorizationControllerDidFinish:(PKPaymentAuthorizationController *)controller
 {
-    NSLog(@"CDVApplePay: didAuthorizePayment");
-
-    if (completion) {
-        self.paymentAuthorizationBlock = completion;
-    }
-    NSDictionary* response = [self formatPaymentForApplication:payment];
-
-    CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:response];
-    [self.commandDelegate sendPluginResult:result callbackId:self.paymentCallbackId];
+    [controller dismissWithCompletion:nil];
 }
-
-- (void)paymentAuthorizationViewController:(PKPaymentAuthorizationViewController *)controller
-                  didSelectShippingContact:(PKContact *)contact
-                                completion:(void (^)(PKPaymentAuthorizationStatus status, NSArray<PKShippingMethod *> *shippingMethods, NSArray<PKPaymentSummaryItem *> *summaryItems))completion
-{
-    if (self.shippingContactSelectionListenerCallbackId) {
-        NSMutableDictionary *response = [[NSMutableDictionary alloc] init];
-        if (contact.postalAddress) {
-            if (contact.postalAddress.city) {
-                [response setObject:contact.postalAddress.city forKey:@"shippingAddressCity"];
-            }
-
-            if (contact.postalAddress.state) {
-                [response setObject:contact.postalAddress.state forKey:@"shippingAddressState"];
-            }
-
-            if (contact.postalAddress.postalCode) {
-                [response setObject:contact.postalAddress.postalCode forKey:@"shippingPostalCode"];
-            }
-
-            if (contact.postalAddress.ISOCountryCode) {
-                [response setObject:[contact.postalAddress.ISOCountryCode uppercaseString] forKey:@"shippingISOCountryCode"];
-            }
-        }
-        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:response];
-        [result setKeepCallbackAsBool:YES];
-        [self.commandDelegate sendPluginResult:result callbackId:self.shippingContactSelectionListenerCallbackId];
-        self.updateItemsAndShippingMethodsBlock = completion;
-    } else {
-        completion(PKPaymentAuthorizationStatusSuccess, self.shippingMethods, self.summaryItems);
-    }
-}
-
-- (void)startListeningForShippingContactSelection:(CDVInvokedUrlCommand *)command
-{
-    self.shippingContactSelectionListenerCallbackId = command.callbackId;
-}
-
-- (void)stopListeningForShippingContactSelection:(CDVInvokedUrlCommand *)command
-{
-    if (self.shippingContactSelectionListenerCallbackId) {
-        self.shippingContactSelectionListenerCallbackId = nil;
-        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:YES];
-        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
-    } else {
-        CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsBool:NO];
-        [self.commandDelegate sendPluginResult:result callbackId:command.callbackId];
-    }
-}
-
-- (PKShippingMethod *)shippingMethodWithIdentifier:(NSString *)idenfifier detail:(NSString *)detail label:(NSString *)label amount:(NSDecimalNumber *)amount
-{
-    PKShippingMethod *shippingMethod = [PKShippingMethod new];
-    shippingMethod.identifier = idenfifier;
-    shippingMethod.detail = detail;
-    shippingMethod.amount = amount;
-    shippingMethod.label = label;
-
-    return shippingMethod;
-}
-
 
 @end
