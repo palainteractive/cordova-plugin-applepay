@@ -323,4 +323,32 @@
     [controller dismissWithCompletion:nil];
 }
 
+- (void)completeLastTransaction:(CDVInvokedUrlCommand *)command
+{
+    NSString *status = nil;
+
+    if (command.arguments.count > 0) {
+        status = command.arguments[0];
+    } else {
+        // Send an error if status is not provided
+        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Status argument is missing"];
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        return;
+    }
+
+    PKPaymentAuthorizationStatus paymentStatus = [self paymentAuthorizationStatusFromArgument:status];
+
+    if (paymentStatus != PKPaymentAuthorizationStatusSuccess) {
+        // If the payment status indicates failure or another issue, send the appropriate status back
+        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Transaction failed"];
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+        return;
+    }
+
+    // If payment is successful, send success status back
+    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Transaction completed successfully"];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+}
+
 @end
+

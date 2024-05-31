@@ -8,6 +8,8 @@ typedef void (^ARListUpdateBlock)(PKPaymentAuthorizationStatus, NSArray<PKShippi
 @interface CDVApplePay : CDVPlugin <PKPaymentAuthorizationControllerDelegate> // Update the protocol here
 {}
 
+@property (nonatomic, assign) PKPaymentAuthorizationStatus lastTransactionStatus;
+
 @property (nonatomic, strong) ARAuthorizationBlock paymentAuthorizationBlock;
 
 @property (nonatomic, strong) ARListUpdateBlock updateItemsAndShippingMethodsBlock;
