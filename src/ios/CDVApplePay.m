@@ -315,12 +315,14 @@
     [result setKeepCallback:[NSNumber numberWithBool:YES]];
     [self.commandDelegate sendPluginResult:result callbackId:self.paymentCallbackId];
 
-    completion([[PKPaymentAuthorizationResult alloc] initWithStatus:PKPaymentAuthorizationStatusSuccess errors:nil]);
+    completion(PKPaymentAuthorizationStatusSuccess);
 }
 
 - (void)paymentAuthorizationControllerDidFinish:(PKPaymentAuthorizationController *)controller
 {
     [controller dismissWithCompletion:nil];
+    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Transaction failed"];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:self.paymentCallbackId];
 }
 
 - (void)completeLastTransaction:(CDVInvokedUrlCommand *)command
