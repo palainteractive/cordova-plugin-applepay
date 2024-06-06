@@ -285,6 +285,8 @@
                    didAuthorizePayment:(PKPayment *)payment
                             completion:(void (^)(PKPaymentAuthorizationResult *result))completion
 {
+    self.paymentCompletionHandler = completion;
+
     NSMutableDictionary *paymentResponse = [[NSMutableDictionary alloc] init];
     [paymentResponse setObject:payment.token.transactionIdentifier forKey:@"transactionIdentifier"];
     [paymentResponse setObject:[NSString stringWithUTF8String:payment.token.paymentData.bytes] forKey:@"paymentData"];
@@ -314,8 +316,6 @@
     CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:paymentResponse];
     [result setKeepCallback:[NSNumber numberWithBool:YES]];
     [self.commandDelegate sendPluginResult:result callbackId:self.paymentCallbackId];
-
-    completion(PKPaymentAuthorizationStatusSuccess);
 }
 
 - (void)paymentAuthorizationControllerDidFinish:(PKPaymentAuthorizationController *)controller
@@ -332,7 +332,9 @@
     if (command.arguments.count > 0) {
         status = command.arguments[0];
     } else {
-        // Send an error if status is not provided
+        PKPaymentAuthorizationResult *result = [[PKPaymentAuthorizationResult alloc] initWithStatus:PKPaymentAuthorizationStatusFailure errors:nil];
+        self.paymentCompletionHandler(result);
+        
         CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Status argument is missing"];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
         return;
@@ -341,13 +343,16 @@
     PKPaymentAuthorizationStatus paymentStatus = [self paymentAuthorizationStatusFromArgument:status];
 
     if (paymentStatus != PKPaymentAuthorizationStatusSuccess) {
-        // If the payment status indicates failure or another issue, send the appropriate status back
+        PKPaymentAuthorizationResult *result = [[PKPaymentAuthorizationResult alloc] initWithStatus:PKPaymentAuthorizationStatusFailure errors:nil];
+        self.paymentCompletionHandler(result);
+        
         CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Transaction failed"];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
         return;
     }
 
     // If payment is successful, send success status back
+    self.paymentCompletionHandler(PKPaymentAuthorizationStatusSuccess);
     CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"Transaction completed successfully"];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }

@@ -22,6 +22,8 @@ typedef void (^ARListUpdateBlock)(PKPaymentAuthorizationStatus, NSArray<PKShippi
 
 @property (nonatomic, strong) NSArray<PKPaymentSummaryItem *>* summaryItems;
 
+@property (nonatomic, copy) void (^paymentCompletionHandler)(PKPaymentAuthorizationResult *result);
+
 - (void)makePaymentRequest:(CDVInvokedUrlCommand*)command;
 - (void)startListeningForShippingContactSelection:(CDVInvokedUrlCommand*)command;
 - (void)stopListeningForShippingContactSelection:(CDVInvokedUrlCommand*)command;
